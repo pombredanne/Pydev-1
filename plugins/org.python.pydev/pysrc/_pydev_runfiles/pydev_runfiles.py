@@ -223,7 +223,7 @@ def parse_cmdline(argv=None):
                         file_and_test = line.split('|')
                         if len(file_and_test) == 2:
                             file, test = file_and_test
-                            if dict_contains(files_to_tests, file):
+                            if file in files_to_tests:
                                 files_to_tests[file].append(test)
                             else:
                                 files_to_tests[file] = [test]
@@ -399,7 +399,7 @@ class PydevTestRunner(object):
                             #they don't have __init__.py
                             exclude = {}
                             for d in dirs:
-                                for init in ['__init__.py', '__init__.pyo', '__init__.pyc', '__init__.pyw']:
+                                for init in ['__init__.py', '__init__.pyo', '__init__.pyc', '__init__.pyw', '__init__$py.class']:
                                     if os.path.exists(os.path.join(root, d, init).replace('\\', '/')):
                                         break
                                 else:
@@ -487,15 +487,22 @@ class PydevTestRunner(object):
 
             return None
 
+    def remove_duplicates_keeping_order(self, seq):
+        seen = set()
+        seen_add = seen.add
+        return [x for x in seq if not (x in seen or seen_add(x))]
+
     def find_modules_from_files(self, pyfiles):
         """ returns a list of modules given a list of files """
         #let's make sure that the paths we want are in the pythonpath...
         imports = [(s, self.__importify(s)) for s in pyfiles]
 
-        system_paths = []
-        for s in sys.path:
-            system_paths.append(self.__importify(s, True))
+        sys_path = [os.path.normpath(path) for path in sys.path]
+        sys_path = self.remove_duplicates_keeping_order(sys_path)
 
+        system_paths = []
+        for s in sys_path:
+            system_paths.append(self.__importify(s, True))
 
         ret = []
         for pyfile, imp in imports:
@@ -537,7 +544,7 @@ class PydevTestRunner(object):
             testFnNames = []
             className = testCaseClass.__name__
 
-            if dict_contains(self.accepted_classes, className):
+            if className in self.accepted_classes:
                 for attrname in dir(testCaseClass):
                     #If a class is chosen, we select all the 'test' methods'
                     if attrname.startswith('test') and hasattr(getattr(testCaseClass, attrname), '__call__'):
@@ -546,7 +553,7 @@ class PydevTestRunner(object):
             else:
                 for attrname in dir(testCaseClass):
                     #If we have the class+method name, we must do a full check and have an exact match.
-                    if dict_contains(self.accepted_methods, className + '.' + attrname):
+                    if className + '.' + attrname in self.accepted_methods:
                         if hasattr(getattr(testCaseClass, attrname), '__call__'):
                             testFnNames.append(attrname)
 
@@ -688,7 +695,8 @@ class PydevTestRunner(object):
                             test_suite.append(test_obj)
                         else:
                             if self.verbosity > 3:
-                                sys.stdout.write('Skipped test: %s (did not match any include_tests pattern %s)\n' % (self.configuration.include_tests,))
+                                sys.stdout.write('Skipped test: %s (did not match any include_tests pattern %s)\n' % (
+                                    testMethodName, self.configuration.include_tests,))
         return test_suite
 
 
@@ -790,7 +798,7 @@ class PydevTestRunner(object):
                 runner.run(test_suite)
 
         if self.configuration.django:
-            MyDjangoTestSuiteRunner(run_tests).run_tests([])
+            get_django_test_suite_runner()(run_tests).run_tests([])
         else:
             run_tests()
 
@@ -802,52 +810,61 @@ class PydevTestRunner(object):
         pydev_runfiles_xml_rpc.notifyTestRunFinished(total_time)
 
 
-try:
-    # django >= 1.8
-    import django
-    from django.test.runner import DiscoverRunner
-    
-    class MyDjangoTestSuiteRunner(DiscoverRunner):
-    
-        def __init__(self, on_run_suite):
-            django.setup()
-            DiscoverRunner.__init__(self)
-            self.on_run_suite = on_run_suite
-    
-        def build_suite(self, *args, **kwargs):
-            pass
-    
-        def suite_result(self, *args, **kwargs):
-            pass
-    
-        def run_suite(self, *args, **kwargs):
-            self.on_run_suite()
-except:
-    # django < 1.8
+DJANGO_TEST_SUITE_RUNNER = None
+
+def get_django_test_suite_runner():
+    global DJANGO_TEST_SUITE_RUNNER
+    if DJANGO_TEST_SUITE_RUNNER:
+        return DJANGO_TEST_SUITE_RUNNER
     try:
-        from django.test.simple import DjangoTestSuiteRunner
-    except:
-        class DjangoTestSuiteRunner:
-            def __init__(self):
+        # django >= 1.8
+        import django
+        from django.test.runner import DiscoverRunner
+
+        class MyDjangoTestSuiteRunner(DiscoverRunner):
+
+            def __init__(self, on_run_suite):
+                django.setup()
+                DiscoverRunner.__init__(self)
+                self.on_run_suite = on_run_suite
+
+            def build_suite(self, *args, **kwargs):
                 pass
-    
-            def run_tests(self, *args, **kwargs):
-                raise AssertionError("Unable to run suite with django.test.runner.DiscoverRunner nor django.test.simple.DjangoTestSuiteRunner because it couldn't be imported.")
-    
-    class MyDjangoTestSuiteRunner(DjangoTestSuiteRunner):
-    
-        def __init__(self, on_run_suite):
-            DjangoTestSuiteRunner.__init__(self)
-            self.on_run_suite = on_run_suite
-    
-        def build_suite(self, *args, **kwargs):
-            pass
-    
-        def suite_result(self, *args, **kwargs):
-            pass
-    
-        def run_suite(self, *args, **kwargs):
-            self.on_run_suite()
+
+            def suite_result(self, *args, **kwargs):
+                pass
+
+            def run_suite(self, *args, **kwargs):
+                self.on_run_suite()
+    except:
+        # django < 1.8
+        try:
+            from django.test.simple import DjangoTestSuiteRunner
+        except:
+            class DjangoTestSuiteRunner:
+                def __init__(self):
+                    pass
+
+                def run_tests(self, *args, **kwargs):
+                    raise AssertionError("Unable to run suite with django.test.runner.DiscoverRunner nor django.test.simple.DjangoTestSuiteRunner because it couldn't be imported.")
+
+        class MyDjangoTestSuiteRunner(DjangoTestSuiteRunner):
+
+            def __init__(self, on_run_suite):
+                DjangoTestSuiteRunner.__init__(self)
+                self.on_run_suite = on_run_suite
+
+            def build_suite(self, *args, **kwargs):
+                pass
+
+            def suite_result(self, *args, **kwargs):
+                pass
+
+            def run_suite(self, *args, **kwargs):
+                self.on_run_suite()
+
+    DJANGO_TEST_SUITE_RUNNER = MyDjangoTestSuiteRunner
+    return DJANGO_TEST_SUITE_RUNNER
 
 
 #=======================================================================================================================

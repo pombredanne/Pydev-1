@@ -481,20 +481,21 @@ public abstract class ParsingUtils extends BaseParsingUtils implements IPythonPa
         char startChar = charAt(startPos);
 
         if (startChar != '"' && startChar != '\'') {
-            throw new RuntimeException("Wrong location to eat literals. Expecting ' or \" ");
+            throw new RuntimeException(
+                    "Wrong location to eat literals. Expecting ' or \". Found: >>" + startChar + "<<");
         }
 
         // Retrieves the correct end position for single- and multi-line
         // string literals.
         int endPos = getLiteralEnd(startPos, startChar);
-        boolean rightTrim = rightTrimMultiline && isMultiLiteral(startPos, startChar);
 
         if (buf != null) {
+            boolean rightTrim = rightTrimMultiline && isMultiLiteral(startPos, startChar);
             int lastPos = Math.min(endPos, len() - 1);
             for (int i = startPos; i <= lastPos; i++) {
                 char ch = charAt(i);
                 if (rightTrim && (ch == '\r' || ch == '\n')) {
-                    buf.rightTrim();
+                    buf.rightTrimWhitespacesAndTabs();
                 }
                 buf.append(ch);
             }
@@ -579,8 +580,15 @@ public abstract class ParsingUtils extends BaseParsingUtils implements IPythonPa
                     i--;
                     break;
                 }
+                // ignoreNextNewLine == true
+                if (i < len && c == '\r') {
+                    //deal with \r\n if found...
+                    if (charAt(i) == '\n') {
+                        i++;
+                    }
+                }
 
-            } else if (c == '\\' || c == '\\') {
+            } else if (c == '\\') {
                 ignoreNextNewLine = true;
                 continue;
 
@@ -592,7 +600,7 @@ public abstract class ParsingUtils extends BaseParsingUtils implements IPythonPa
 
             ignoreNextNewLine = false;
         }
-        i--; //we have to do that because we passed 1 char in the beggining of the while.
+        i--; //we have to do that because we passed 1 char in the beginning of the while.
         return i;
     }
 
@@ -1063,8 +1071,7 @@ public abstract class ParsingUtils extends BaseParsingUtils implements IPythonPa
         ;
     }
 
-    public static boolean isCommentContentType(String contentType)
-    {
+    public static boolean isCommentContentType(String contentType) {
         return IPythonPartitions.PY_COMMENT.equals(contentType);
     }
 
@@ -1076,6 +1083,33 @@ public abstract class ParsingUtils extends BaseParsingUtils implements IPythonPa
     public static boolean isCommentPartition(IDocument document, int offset) {
         String contentType = getContentType(document, offset);
         return isCommentContentType(contentType);
+    }
+
+    public static String removeCalls(String activationToken) {
+        ParsingUtils parsingUtils = ParsingUtils.create(activationToken);
+        FastStringBuffer buf = new FastStringBuffer(activationToken.length());
+        int i = 0;
+        while (true) {
+            int nextParI = parsingUtils.findNextChar(i, '(');
+            if (nextParI == -1) {
+                break;
+            }
+
+            buf.append(activationToken.substring(i, nextParI));
+            try {
+                int j = parsingUtils.eatPar(nextParI, null);
+                if (j != -1) {
+                    i = j;
+                }
+            } catch (SyntaxErrorException e) {
+            }
+            i++;
+        }
+        if (i < parsingUtils.len()) {
+            //Add the remainder of the string if it didn't end with a ')'.
+            buf.append(activationToken.substring(i));
+        }
+        return buf.toString();
     }
 
 }

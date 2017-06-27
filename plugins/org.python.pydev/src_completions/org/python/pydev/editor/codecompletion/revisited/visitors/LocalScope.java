@@ -22,7 +22,9 @@ import java.util.Set;
 
 import org.python.pydev.core.FullRepIterable;
 import org.python.pydev.core.ILocalScope;
+import org.python.pydev.core.IPythonNature;
 import org.python.pydev.core.IToken;
+import org.python.pydev.core.ITypeInfo;
 import org.python.pydev.core.log.Log;
 import org.python.pydev.editor.codecompletion.revisited.modules.SourceToken;
 import org.python.pydev.parser.jython.SimpleNode;
@@ -40,6 +42,7 @@ import org.python.pydev.parser.jython.ast.commentType;
 import org.python.pydev.parser.jython.ast.exprType;
 import org.python.pydev.parser.jython.ast.stmtType;
 import org.python.pydev.parser.visitors.NodeUtils;
+import org.python.pydev.parser.visitors.TypeInfo;
 import org.python.pydev.parser.visitors.scope.ASTEntry;
 import org.python.pydev.parser.visitors.scope.SequencialASTIteratorVisitor;
 import org.python.pydev.shared_core.model.ISimpleNode;
@@ -59,6 +62,8 @@ public class LocalScope implements ILocalScope {
 
     public SimpleNode foundAtASTNode;
 
+    private final IPythonNature nature;
+
     @Override
     public void setFoundAtASTNode(ISimpleNode node) {
         this.foundAtASTNode = (SimpleNode) node;
@@ -73,11 +78,12 @@ public class LocalScope implements ILocalScope {
      * Used to create without an initial scope. It may be changed later by using the getScopeStack() and
      * adding tokens.
      */
-    public LocalScope() {
-
+    public LocalScope(IPythonNature nature) {
+        this.nature = nature;
     }
 
-    public LocalScope(FastStack<SimpleNode> scope) {
+    public LocalScope(IPythonNature nature, FastStack<SimpleNode> scope) {
+        this.nature = nature;
         this.scope.addAll(scope);
     }
 
@@ -187,21 +193,21 @@ public class LocalScope implements ILocalScope {
 
                 for (int i = 0; i < args.args.length; i++) {
                     String s = NodeUtils.getRepresentationString(args.args[i]);
-                    comps.add(new SourceToken(args.args[i], s, "", "", "", IToken.TYPE_PARAM));
+                    comps.add(new SourceToken(args.args[i], s, "", "", "", IToken.TYPE_PARAM, nature));
                 }
                 if (args.vararg != null) {
                     String s = NodeUtils.getRepresentationString(args.vararg);
-                    comps.add(new SourceToken(args.vararg, s, "", "", "", IToken.TYPE_PARAM));
+                    comps.add(new SourceToken(args.vararg, s, "", "", "", IToken.TYPE_PARAM, nature));
                 }
 
                 if (args.kwarg != null) {
                     String s = NodeUtils.getRepresentationString(args.kwarg);
-                    comps.add(new SourceToken(args.kwarg, s, "", "", "", IToken.TYPE_PARAM));
+                    comps.add(new SourceToken(args.kwarg, s, "", "", "", IToken.TYPE_PARAM, nature));
                 }
                 if (args.kwonlyargs != null) {
                     for (int i = 0; i < args.kwonlyargs.length; i++) {
                         String s = NodeUtils.getRepresentationString(args.kwonlyargs[i]);
-                        comps.add(new SourceToken(args.kwonlyargs[i], s, "", "", "", IToken.TYPE_PARAM));
+                        comps.add(new SourceToken(args.kwonlyargs[i], s, "", "", "", IToken.TYPE_PARAM, nature));
                     }
                 }
 
@@ -220,7 +226,7 @@ public class LocalScope implements ILocalScope {
                 try {
                     for (int i = 0; i < body.length; i++) {
                         GlobalModelVisitor visitor = new GlobalModelVisitor(GlobalModelVisitor.GLOBAL_TOKENS, "",
-                                false, true);
+                                false, true, this.nature);
                         stmtType stmt = body[i];
                         if (stmt == null) {
                             continue;
@@ -294,7 +300,7 @@ public class LocalScope implements ILocalScope {
                     rep = rep.substring(dottedActTok.length());
                     if (NodeUtils.isValidNameRepresentation(rep)) { //that'd be something that can happen when trying to recreate the parsing
                         comps.add(new SourceToken(entry.node, FullRepIterable.getFirstPart(rep), "", "", "",
-                                IToken.TYPE_OBJECT_FOUND_INTERFACE));
+                                IToken.TYPE_OBJECT_FOUND_INTERFACE, this.nature));
                     }
                 }
             } else if (entry.node instanceof Call) {
@@ -309,7 +315,7 @@ public class LocalScope implements ILocalScope {
                             String attrName = str.s;
                             if (NodeUtils.isValidNameRepresentation(attrName)) {
                                 comps.add(new SourceToken(node, attrName, "", "", "",
-                                        IToken.TYPE_OBJECT_FOUND_INTERFACE));
+                                        IToken.TYPE_OBJECT_FOUND_INTERFACE, this.nature));
                             }
                         }
                     }
@@ -335,7 +341,7 @@ public class LocalScope implements ILocalScope {
                     stmtType stmt = f.body[i];
                     if (stmt != null) {
                         importedModules.addAll(GlobalModelVisitor.getTokens(stmt, GlobalModelVisitor.ALIAS_MODULES,
-                                moduleName, null, false));
+                                moduleName, null, false, this.nature));
                     }
                 }
             }
@@ -418,8 +424,8 @@ public class LocalScope implements ILocalScope {
      * @see {@link ILocalScope#getPossibleClassesForActivationToken(String)}
      */
     @Override
-    public List<String> getPossibleClassesForActivationToken(String actTok) {
-        ArrayList<String> ret = new ArrayList<String>();
+    public List<ITypeInfo> getPossibleClassesForActivationToken(String actTok) {
+        List<ITypeInfo> ret = new ArrayList<>();
 
         Iterator<SimpleNode> it = this.scope.topDownIterator();
         if (!it.hasNext()) {
@@ -429,8 +435,7 @@ public class LocalScope implements ILocalScope {
 
         //ok, that's the scope we have to analyze
 
-        //Search for docstrings.
-        String typeForParameter = NodeUtils.getTypeForParameterFromDocstring(actTok, element);
+        ITypeInfo typeForParameter = NodeUtils.getTypeForParameterFromAST(actTok, element);
         if (typeForParameter != null) {
             ret.add(typeForParameter);
         }
@@ -503,7 +508,7 @@ public class LocalScope implements ILocalScope {
                                 }
                             } else {
                                 //zope case Interface.implementedBy(obj) -> Interface added
-                                ret.add(FullRepIterable.getWithoutLastPart(rep));
+                                ret.add(new TypeInfo(FullRepIterable.getWithoutLastPart(rep)));
                             }
                         }
                     }
@@ -528,12 +533,12 @@ public class LocalScope implements ILocalScope {
                         if (trim.startsWith(":")) {
                             String type = NodeUtils.getTypeForParameterFromDocstring(actTok, trim.substring(1));
                             if (type != null) {
-                                ret.add(type);
+                                ret.add(new TypeInfo(type));
                             }
                         } else if (trim.startsWith("@")) {
                             String type = NodeUtils.getTypeForParameterFromDocstring(actTok, trim);
                             if (type != null) {
-                                ret.add(type);
+                                ret.add(new TypeInfo(type));
                             }
                         }
                         //                        }
@@ -550,12 +555,12 @@ public class LocalScope implements ILocalScope {
                         if (trim.startsWith(":")) {
                             String type = NodeUtils.getTypeForParameterFromDocstring(actTok, trim.substring(1));
                             if (type != null) {
-                                ret.add(type);
+                                ret.add(new TypeInfo(type));
                             }
                         } else if (trim.startsWith("@")) {
                             String type = NodeUtils.getTypeForParameterFromDocstring(actTok, trim);
                             if (type != null) {
-                                ret.add(type);
+                                ret.add(new TypeInfo(type));
                             }
                         }
                     }
@@ -570,13 +575,17 @@ public class LocalScope implements ILocalScope {
      * @param ret the list where the representation should be added
      * @param expr the Name or Attribute that determines the class that should be added
      */
-    private void addRepresentationIfPossible(ArrayList<String> ret, exprType expr) {
+    private void addRepresentationIfPossible(List<ITypeInfo> ret, exprType expr) {
         if (expr instanceof Name || expr instanceof Attribute) {
             String string = NodeUtils.getFullRepresentationString(expr);
             if (string != null) {
-                ret.add(string);
+                ret.add(new TypeInfo(string));
             }
         }
+    }
+
+    public IPythonNature getPythonNature() {
+        return this.nature;
     }
 
 }

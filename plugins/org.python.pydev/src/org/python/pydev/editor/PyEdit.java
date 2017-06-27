@@ -32,6 +32,7 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.action.Action;
@@ -48,10 +49,13 @@ import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.IDocumentListener;
 import org.eclipse.jface.text.IRegion;
+import org.eclipse.jface.text.ITextHover;
 import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.ITextViewerExtension2;
 import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.text.source.IVerticalRuler;
 import org.eclipse.jface.text.source.LineNumberRulerColumn;
+import org.eclipse.jface.text.source.SourceViewerConfiguration;
 import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.swt.custom.VerifyKeyListener;
@@ -76,6 +80,7 @@ import org.eclipse.ui.texteditor.ITextEditorActionConstants;
 import org.eclipse.ui.texteditor.ITextEditorActionDefinitionIds;
 import org.eclipse.ui.texteditor.ITextEditorExtension2;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
+import org.osgi.framework.Version;
 import org.python.pydev.changed_lines.ChangedLinesComputer;
 import org.python.pydev.core.ExtensionHelper;
 import org.python.pydev.core.FileUtilsFileBuffer;
@@ -168,6 +173,7 @@ import org.python.pydev.shared_ui.utils.PyMarkerUtils;
 import org.python.pydev.shared_ui.utils.PyMarkerUtils.MarkerInfo;
 import org.python.pydev.shared_ui.utils.RunInUiThread;
 import org.python.pydev.ui.ColorAndStyleCache;
+import org.python.pydev.ui.dialogs.PyDialogHelpers;
 import org.python.pydev.ui.filetypes.FileTypesPreferencesPage;
 
 /**
@@ -293,6 +299,7 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
     protected void handlePreferenceStoreChanged(PropertyChangeEvent event) {
         super.handlePreferenceStoreChanged(event);
         this.onHandlePreferenceStoreChanged.call(event);
+        updateHoverBehavior();
     }
 
     @Override
@@ -350,10 +357,41 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
 
             CheckDefaultPreferencesDialog.askAboutSettings();
 
-            //Ask for people to take a look in the crowdfunding for pydev:
-            //http://tiny.cc/pydev-2014
+            //Ask for people to consider funding PyDev.
             PydevShowBrowserMessage.show();
+
+            //Warn about the Eclipse version we require.
+            checkEclipseRunning();
         } catch (Throwable e) {
+            Log.log(e);
+        }
+    }
+
+    private boolean checkedEclipseVersion = false;
+
+    private void checkEclipseRunning() {
+        if (checkedEclipseVersion) {
+            return;
+        }
+        checkedEclipseVersion = true;
+        try {
+            String string = Platform.getBundle("org.eclipse.jface.text").getHeaders().get("Bundle-Version");
+            Version version = new Version(string);
+            if (version.compareTo(new Version("3.11.0")) < 0) {
+                Log.log("Error: This version of PyDev requires a newer version of Eclipse to run properly.");
+                RunInUiThread.async(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        PyDialogHelpers.openCritical("Eclipse version too old (4.6 -- Neon -- required).",
+                                "This version of PyDev requires a newer version of Eclipse to run properly.\n\n"
+                                        + "Please upgrade Eclipse or use an older version of PyDev.\n\n"
+                                        + "See: http://www.pydev.org/download.html for requirements\n"
+                                        + "(for this version or older versions).");
+                    }
+                }, false);
+            }
+        } catch (Exception e) {
             Log.log(e);
         }
     }
@@ -652,6 +690,44 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
         ArrayList<MarkerInfo> lst = new ArrayList<MarkerInfo>();
         lst.add(markerInfo);
         PyMarkerUtils.replaceMarkers(lst, fileAdapter, INVALID_MODULE_MARKER_TYPE, true, new NullProgressMonitor());
+    }
+
+    /*
+     * Update the hovering behavior depending on the preferences.
+     */
+    private void updateHoverBehavior() {
+        ISourceViewer sourceViewer = getSourceViewer();
+        if (sourceViewer == null) {
+            return;
+        }
+        SourceViewerConfiguration configuration = getSourceViewerConfiguration();
+        String[] types = configuration.getConfiguredContentTypes(getSourceViewer());
+
+        for (int i = 0; i < types.length; i++) {
+
+            String t = types[i];
+
+            if (sourceViewer instanceof ITextViewerExtension2) {
+                // Remove existing hovers
+                ((ITextViewerExtension2) sourceViewer).removeTextHovers(t);
+
+                int[] stateMasks = configuration.getConfiguredTextHoverStateMasks(getSourceViewer(), t);
+
+                if (stateMasks != null) {
+                    for (int j = 0; j < stateMasks.length; j++) {
+                        int stateMask = stateMasks[j];
+                        ITextHover textHover = configuration.getTextHover(sourceViewer, t, stateMask);
+                        ((ITextViewerExtension2) sourceViewer).setTextHover(textHover, t, stateMask);
+                    }
+                } else {
+                    ITextHover textHover = configuration.getTextHover(sourceViewer, t);
+                    ((ITextViewerExtension2) sourceViewer).setTextHover(textHover, t,
+                            ITextViewerExtension2.DEFAULT_HOVER_STATE_MASK);
+                }
+            } else {
+                sourceViewer.setTextHover(configuration.getTextHover(sourceViewer, t), t);
+            }
+        }
     }
 
     /**
@@ -1289,7 +1365,7 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
                                 synchronized (lockHandle) {
                                     releaseCurrentHandle();
                                     int modHandle = modulesManager.pushTemporaryModule(moduleName, new SourceModule(
-                                            moduleName, editorFile, ast, null));
+                                            moduleName, editorFile, ast, null, pythonNature));
 
                                     this.handle = new Tuple3<Integer, IModulesManager, String>(modHandle,
                                             modulesManager, moduleName);
@@ -1464,6 +1540,15 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
     }
 
     @Override
+    public AdditionalGrammarVersionsToCheck getAdditionalGrammarVersions() throws MisconfigurationException {
+        IPythonNature pythonNature = getPythonNature();
+        if (pythonNature != null) {
+            return pythonNature.getAdditionalGrammarVersions();
+        }
+        return null;
+    }
+
+    @Override
     public IGrammarVersionProvider getGrammarVersionProvider() {
         return new IGrammarVersionProvider() {
 
@@ -1471,6 +1556,11 @@ public class PyEdit extends PyEditProjection implements IPyEdit, IGrammarVersion
             public int getGrammarVersion() throws MisconfigurationException {
                 //Always calculate at the present time based on the editor configuration.
                 return PyEdit.this.getGrammarVersion();
+            }
+
+            @Override
+            public AdditionalGrammarVersionsToCheck getAdditionalGrammarVersions() throws MisconfigurationException {
+                return PyEdit.this.getAdditionalGrammarVersions();
             }
         };
     }

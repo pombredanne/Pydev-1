@@ -13,7 +13,7 @@ import struct
 def is_python_64bit():
     return (struct.calcsize('P') == 8)
 
-root_dir = os.path.join(os.path.dirname(__file__), '..')
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 def get_cython_contents(filename):
     if filename.endswith('.pyc'):
@@ -135,7 +135,7 @@ if IS_PY3K:
                 dirs.remove(d)
             except:
                 pass
-            
+
         for f in files:
             if f.endswith('.py'):
                 if f not in (
@@ -146,6 +146,7 @@ if IS_PY3K:
                     'setup.py',
                     'setup_cython.py',
                     'interpreterInfo.py',
+                    'conftest.py',
                     ):
                     pydev_files.append("    '%s': PYDEV_FILE," % (f,))
 

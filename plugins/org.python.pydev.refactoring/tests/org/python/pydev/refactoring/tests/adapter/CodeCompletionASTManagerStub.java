@@ -28,11 +28,13 @@ import org.eclipse.jface.text.IDocument;
 import org.python.pydev.core.ICodeCompletionASTManager;
 import org.python.pydev.core.ICompletionRequest;
 import org.python.pydev.core.ICompletionState;
+import org.python.pydev.core.IDefinition;
 import org.python.pydev.core.ILocalScope;
 import org.python.pydev.core.IModule;
 import org.python.pydev.core.IModulesManager;
 import org.python.pydev.core.IPythonNature;
 import org.python.pydev.core.IToken;
+import org.python.pydev.core.ITypeInfo;
 import org.python.pydev.core.UnpackInfo;
 import org.python.pydev.core.structure.CompletionRecursionException;
 import org.python.pydev.editor.codecompletion.revisited.modules.SourceToken;
@@ -82,8 +84,8 @@ public class CodeCompletionASTManagerStub implements ICodeCompletionASTManager {
     @Override
     public IToken[] getCompletionsForModule(IModule module, ICompletionState state)
             throws CompletionRecursionException {
-        return new IToken[] { new SourceToken(new Name("True", Name.Store, true), "True", "", "", "__builtin__"),
-                new SourceToken(new Name("False", Name.Store, true), "False", "", "", "__builtin__"), };
+        return new IToken[] { new SourceToken(new Name("True", Name.Store, true), "True", "", "", "__builtin__", null),
+                new SourceToken(new Name("False", Name.Store, true), "False", "", "", "__builtin__", null), };
     }
 
     @Override
@@ -163,8 +165,8 @@ public class CodeCompletionASTManagerStub implements ICodeCompletionASTManager {
 
     @Override
     public void getCompletionsForClassInLocalScope(IModule module, ICompletionState state, boolean searchSameLevelMods,
-            boolean lookForArgumentCompletion, List<String> lookForClass, HashSet<IToken> hashSet)
-                    throws CompletionRecursionException {
+            boolean lookForArgumentCompletion, List<ITypeInfo> lookForClass, HashSet<IToken> hashSet)
+            throws CompletionRecursionException {
         throw new RuntimeException("Not implemented");
     }
 
@@ -187,6 +189,12 @@ public class CodeCompletionASTManagerStub implements ICodeCompletionASTManager {
     @Override
     public boolean getCompletionsForWildImport(ICompletionState state, IModule current, List<IToken> completions,
             IToken wildImport) {
+        throw new RuntimeException("Not implemented");
+    }
+
+    @Override
+    public List<IToken> getCompletionFromFuncDefReturn(ICompletionState state, IModule s, IDefinition definition,
+            boolean considerYieldTheReturnType) {
         throw new RuntimeException("Not implemented");
     }
 
@@ -218,7 +226,7 @@ public class CodeCompletionASTManagerStub implements ICodeCompletionASTManager {
     @Override
     public IToken[] getCompletionsFromTokenInLocalScope(IModule module, ICompletionState state,
             boolean searchSameLevelMods, boolean lookForArgumentCompletion, ILocalScope localScope)
-                    throws CompletionRecursionException {
+            throws CompletionRecursionException {
         throw new RuntimeException("Not implemented");
     }
 

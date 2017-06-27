@@ -30,7 +30,7 @@ import org.eclipse.ui.texteditor.link.EditorLinkedModeUI;
 import org.python.pydev.core.IToken;
 import org.python.pydev.core.log.Log;
 import org.python.pydev.editor.codecompletion.revisited.modules.SourceToken;
-import org.python.pydev.editor.hover.PyTextHover;
+import org.python.pydev.editor.hover.AbstractPyEditorTextHover;
 import org.python.pydev.parser.jython.SimpleNode;
 import org.python.pydev.parser.jython.ast.ClassDef;
 import org.python.pydev.parser.jython.ast.FunctionDef;
@@ -44,8 +44,8 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
 
     /**
      * The number of positions that we should add to the original position.
-     * 
-     * Used so that when we enter '.', we add an additional position (because '.' will be added when applying the completion) 
+     *
+     * Used so that when we enter '.', we add an additional position (because '.' will be added when applying the completion)
      * or so that we can go back one position when the toggle mode (ctrl) is on and a completion with parameters is applied (and they
      * are removed)
      */
@@ -71,10 +71,10 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
      */
     public PyLinkedModeCompletionProposal(String replacementString, int replacementOffset, int replacementLength,
             int cursorPosition, IToken element, String displayString, IContextInformation contextInformation,
-            int priority, int onApplyAction, String args) {
+            int priority, int onApplyAction, String args, ICompareContext compareContext) {
 
         super(replacementString, replacementOffset, replacementLength, cursorPosition, null, displayString,
-                contextInformation, "", priority, onApplyAction, args);
+                contextInformation, "", priority, onApplyAction, args, compareContext);
 
         this.element = element;
     }
@@ -91,9 +91,10 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
      */
     public PyLinkedModeCompletionProposal(String replacementString, int replacementOffset, int replacementLength,
             int cursorPosition, Image image, String displayString, IContextInformation contextInformation,
-            String additionalProposalInfo, int priority, int onApplyAction, String args) {
+            String additionalProposalInfo, int priority, int onApplyAction, String args,
+            ICompareContext compareContext) {
         super(replacementString, replacementOffset, replacementLength, cursorPosition, image, displayString,
-                contextInformation, additionalProposalInfo, priority, onApplyAction, args);
+                contextInformation, additionalProposalInfo, priority, onApplyAction, args, compareContext);
     }
 
     /**
@@ -101,9 +102,10 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
      */
     public PyLinkedModeCompletionProposal(String replacementString, int replacementOffset, int replacementLength,
             int cursorPosition, Image image, String displayString, IContextInformation contextInformation,
-            String additionalProposalInfo, int priority, int onApplyAction, String args, boolean goToLinkedMode) {
+            String additionalProposalInfo, int priority, int onApplyAction, String args, boolean goToLinkedMode,
+            ICompareContext compareContext) {
         super(replacementString, replacementOffset, replacementLength, cursorPosition, image, displayString,
-                contextInformation, additionalProposalInfo, priority, onApplyAction, args);
+                contextInformation, additionalProposalInfo, priority, onApplyAction, args, compareContext);
         this.goToLinkedMode = goToLinkedMode;
     }
 
@@ -130,18 +132,45 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
                 SourceToken sourceToken = (SourceToken) element;
                 SimpleNode ast = sourceToken.getAst();
                 if (ast != null && (ast instanceof FunctionDef || ast instanceof ClassDef)) {
-                    computedInfo = PyTextHover.printAst(null, ast);
+                    computedInfo = addTipForApplyWithModifiers(AbstractPyEditorTextHover.printAst(null, ast));
                 }
                 if (computedInfo != null) {
                     return computedInfo;
                 }
 
             }
-            computedInfo = element.getDocStr();
+            computedInfo = addTipForApplyWithModifiers(element.getDocStr());
             return computedInfo;
         } else {
-            return super.getAdditionalProposalInfo();
+            return addTipForApplyWithModifiers(super.getAdditionalProposalInfo());
         }
+    }
+
+    private final static String MSG = ""
+            + "Enter: apply completion.\n"
+            + "  + Ctrl: remove arguments and replace current word (no Pop-up focus).\n"
+            + "  + Shift: remove arguments (requires Pop-up focus).\n";
+
+    private final static String MSG2 = ""
+            + "Enter: apply completion.\n"
+            + "  + Ctrl: replace current word (no Pop-up focus).\n";
+
+    private String addTipForApplyWithModifiers(String string) {
+        String ret = string;
+        if (onApplyAction == ON_APPLY_DEFAULT) {
+            String msg;
+            if (fReplacementString.indexOf('(') != -1) {
+                msg = MSG;
+            } else {
+                msg = MSG2;
+            }
+            if (string == null || string.length() == 0) {
+                ret = msg;
+            } else {
+                ret = string + "\n\n" + msg;
+            }
+        }
+        return ret;
     }
 
     //end methods overriden to be lazily gotten ------------------------------------------------------------------------
@@ -173,7 +202,13 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
     @Override
     public void apply(ITextViewer viewer, char trigger, int stateMask, int offset) {
 
-        boolean eat = (stateMask & SWT.MOD1) != 0;
+        ApplyDefaultBehavior noParamsAndOverwriteCurrentWord = ApplyDefaultBehavior.NO_CHANGE;
+        if ((stateMask & SWT.MOD1) != 0) { // Ctrl
+            noParamsAndOverwriteCurrentWord = ApplyDefaultBehavior.REMOVE_PARAMS_AND_REPLACE_TEXT;
+        } else if ((stateMask & SWT.MOD2) != 0) { // Shift
+            noParamsAndOverwriteCurrentWord = ApplyDefaultBehavior.REMOVE_PARAMS;
+        }
+
         IDocument doc = viewer.getDocument();
 
         if (!triggerCharAppliesCurrentCompletion(trigger, doc, offset)) {
@@ -212,7 +247,7 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
             try {
                 int dif = offset - fReplacementOffset;
                 String strToAdd = fReplacementString.substring(dif);
-                boolean doReturn = applyOnDoc(offset, eat, doc, dif, trigger);
+                boolean doReturn = applyOnDoc(offset, noParamsAndOverwriteCurrentWord, doc, dif, trigger);
 
                 if (doReturn || !goToLinkedMode) {
                     return;
@@ -235,27 +270,36 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
 
     }
 
+    public enum ApplyDefaultBehavior {
+        NO_CHANGE, REMOVE_PARAMS, REMOVE_PARAMS_AND_REPLACE_TEXT
+    }
+
+    public void applyOnDoc(int offset, boolean eat, IDocument doc, int dif, char trigger) throws BadLocationException {
+        applyOnDoc(offset, eat ? ApplyDefaultBehavior.REMOVE_PARAMS_AND_REPLACE_TEXT : ApplyDefaultBehavior.NO_CHANGE,
+                doc, dif, trigger);
+    }
+
     /**
      * Applies the changes in the document (useful for testing)
-     * 
+     *
      * @param offset the offset where the change should be applied
      * @param eat whether we should 'eat' the selection (on toggle)
-     * @param doc the document where the changes should be applied 
-     * @param dif the difference between the offset and and the replacement offset  
-     * 
+     * @param doc the document where the changes should be applied
+     * @param dif the difference between the offset and and the replacement offset
+     *
      * @return whether we should return (and not keep on with the linking mode)
      * @throws BadLocationException
      */
-    public boolean applyOnDoc(int offset, boolean eat, IDocument doc, int dif, char trigger)
+    public boolean applyOnDoc(int offset, ApplyDefaultBehavior eat, IDocument doc, int dif, char trigger)
             throws BadLocationException {
         boolean doReturn = false;
 
         String rep = fReplacementString;
         int iPar = rep.indexOf('(');
 
-        if (eat) {
+        if (eat == ApplyDefaultBehavior.REMOVE_PARAMS_AND_REPLACE_TEXT) {
 
-            //behavior change: when we have a parenthesis and we're in toggle (eat) mode, let's not add the 
+            //behavior change: when we have a parenthesis and we're in toggle (eat) mode, let's not add the
             //parenthesis anymore.
             if (/*fLastIsPar &&*/iPar != -1) {
                 rep = rep.substring(0, iPar);
@@ -281,6 +325,7 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
                 doc.replace(offset - dif, dif + this.fLen + sumReplace, rep);
             }
         } else {
+
             if (trigger == '.' || trigger == '(') {
                 if (iPar != -1) {
                     //if we had a completion with parameters, we should just remove everything that would appear after
@@ -298,6 +343,14 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
 
                 //linking should not happen when applying '.'
                 doReturn = true;
+            } else {
+                if (eat == ApplyDefaultBehavior.REMOVE_PARAMS) {
+                    if (iPar != -1) {
+                        rep = rep.substring(0, iPar);
+                        nPositionsAdded = -1;
+                        doReturn = true;
+                    }
+                }
             }
 
             //if the trigger is ')', just let it apply regularly -- so, ')' will only be added if it's already in the completion.
@@ -382,10 +435,10 @@ public final class PyLinkedModeCompletionProposal extends AbstractPyCompletionPr
 
     /**
      * We want to apply it on \n or on '.'
-     * 
+     *
      * When . is entered, the user will finish (and apply) the current completion
      * and request a new one with '.'
-     * 
+     *
      * If not added, it won't request the new one (and will just stop the current)
      */
     @Override

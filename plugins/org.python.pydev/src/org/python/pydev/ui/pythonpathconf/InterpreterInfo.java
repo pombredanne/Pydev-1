@@ -285,7 +285,7 @@ public class InterpreterInfo implements IInterpreterInfo {
      * @param received
      *            String to parse
      * @param askUserInOutPath
-     *            true to prompt user about which paths to include. 
+     *            true to prompt user about which paths to include.
      * @param userSpecifiedExecutable the path the the executable as specified by the user, or null to use that in received
      * @return new interpreter info
      */
@@ -398,7 +398,7 @@ public class InterpreterInfo implements IInterpreterInfo {
                     }
 
                     if (fromPythonBackend) {
-                        //Ok, when the python backend generated the interpreter information, go on and fill it with 
+                        //Ok, when the python backend generated the interpreter information, go on and fill it with
                         //additional entries (i.e.: not only when we need to ask the user), as this information may
                         //be later used to check if the interpreter information is valid or missing paths.
                         AdditionalEntries additionalEntries = new AdditionalEntries();
@@ -876,11 +876,14 @@ public class InterpreterInfo implements IInterpreterInfo {
         if (this.version.startsWith("2") || this.version.startsWith("1")) {
             //don't add it for 3.0 onwards.
             forcedLibs.add("__builtin__"); //jython bug: __builtin__ is not added
+        } else {
+            forcedLibs.add("builtins"); //just make sure it's always there!
         }
         forcedLibs.add("sys"); //jython bug: sys is not added
         forcedLibs.add("email"); //email has some lazy imports that pydev cannot handle through the source
         forcedLibs.add("hashlib"); //depending on the Python version, hashlib cannot find md5, so, let's always leave it there.
         forcedLibs.add("pytest"); //yeap, pytest does have a structure that's pretty hard to analyze.
+        forcedLibs.add("six"); // six creates its six.moves all through deep magic.
 
         int interpreterType = getInterpreterType();
         switch (interpreterType) {
@@ -899,6 +902,7 @@ public class InterpreterInfo implements IInterpreterInfo {
                 forcedLibs.add("gi"); // for gnome introspection
                 forcedLibs.add("numpy");
                 forcedLibs.add("scipy");
+                forcedLibs.add("mock"); // mock.patch.object is not gotten if mock is not there for the mock library.
                 forcedLibs.add("Image"); //for PIL
 
                 //these are the builtins -- apparently sys.builtin_module_names is not ok in linux.
@@ -958,6 +962,7 @@ public class InterpreterInfo implements IInterpreterInfo {
                 forcedLibs.add("parser");
                 forcedLibs.add("signal");
                 forcedLibs.add("socket"); //socket seems to have issues on linux
+                forcedLibs.add("ssl");
                 forcedLibs.add("strop");
                 forcedLibs.add("sys");
                 forcedLibs.add("thread");

@@ -45,6 +45,7 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         //text
         node.putBoolean(PydevTypingPrefs.SMART_INDENT_PAR, PydevTypingPrefs.DEFAULT_SMART_INDENT_PAR);
         node.putBoolean(PydevTypingPrefs.AUTO_PAR, PydevTypingPrefs.DEFAULT_AUTO_PAR);
+        node.putBoolean(PydevTypingPrefs.INDENT_AFTER_PAR_AS_PEP8, PydevTypingPrefs.DEFAULT_INDENT_AFTER_PAR_AS_PEP8);
         node.putBoolean(PydevTypingPrefs.AUTO_LINK, PydevTypingPrefs.DEFAULT_AUTO_LINK);
         node.putBoolean(PydevTypingPrefs.AUTO_INDENT_TO_PAR_LEVEL, PydevTypingPrefs.DEFAULT_AUTO_INDENT_TO_PAR_LEVEL);
         node.putBoolean(PydevTypingPrefs.AUTO_DEDENT_ELSE, PydevTypingPrefs.DEFAULT_AUTO_DEDENT_ELSE);
@@ -107,7 +108,7 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         node.put(PydevEditorPrefs.OPERATORS_COLOR, StringConverter.asString(PydevEditorPrefs.DEFAULT_OPERATORS_COLOR));
         node.put(PydevEditorPrefs.DOCSTRING_MARKUP_COLOR,
                 StringConverter.asString(PydevEditorPrefs.DEFAULT_DOCSTRING_MARKUP_COLOR));
-                //for selection colors see initializeDefaultColors()
+        //for selection colors see initializeDefaultColors()
 
         //font style
         node.putInt(PydevEditorPrefs.CODE_STYLE, PydevEditorPrefs.DEFAULT_CODE_STYLE);
@@ -129,6 +130,7 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         node.putInt(PydevEditorPrefs.CONNECT_TIMEOUT, PydevEditorPrefs.DEFAULT_CONNECT_TIMEOUT);
         node.putBoolean(PydevEditorPrefs.RELOAD_MODULE_ON_CHANGE, PydevEditorPrefs.DEFAULT_RELOAD_MODULE_ON_CHANGE);
         node.putBoolean(PydevEditorPrefs.DONT_TRACE_ENABLED, PydevEditorPrefs.DEFAULT_DONT_TRACE_ENABLED);
+        node.putBoolean(PydevEditorPrefs.SHOW_RETURN_VALUES, PydevEditorPrefs.DEFAULT_SHOW_RETURN_VALUES);
         node.putBoolean(PydevEditorPrefs.DEBUG_MULTIPROCESSING_ENABLED,
                 PydevEditorPrefs.DEFAULT_DEBUG_MULTIPROCESSING_ENABLED);
         node.putBoolean(PydevEditorPrefs.KILL_SUBPROCESSES_WHEN_TERMINATING_PROCESS,
@@ -136,6 +138,7 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         node.putBoolean(PydevEditorPrefs.GEVENT_DEBUGGING, PydevEditorPrefs.DEFAULT_GEVENT_DEBUGGING);
         node.putBoolean(PydevEditorPrefs.TRACE_DJANGO_TEMPLATE_RENDER_EXCEPTIONS,
                 PydevEditorPrefs.DEFAULT_TRACE_DJANGO_TEMPLATE_RENDER_EXCEPTIONS);
+        node.put(PydevEditorPrefs.QT_THREADS_DEBUG_MODE, PydevEditorPrefs.DEFAULT_QT_THREADS_DEBUG_MODE);
 
         //pydev todo tasks
         node.put(PyTodoPrefPage.PY_TODO_TAGS, PyTodoPrefPage.DEFAULT_PY_TODO_TAGS);
@@ -165,7 +168,7 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         import folding_entries
         for s in folding_entries.FOLDING_ENTRIES:
             cog.outl(template % (s, s, s, s))
-            
+        
         ]]]*/
         node.putBoolean(PyDevCodeFoldingPrefPage.FOLD_IMPORTS,
                 PyDevCodeFoldingPrefPage.DEFAULT_FOLD_IMPORTS);
@@ -288,10 +291,12 @@ public class PydevPrefsInitializer extends AbstractPreferenceInitializer {
         node.putBoolean(ImportsPreferencesPage.SORT_NAMES_GROUPED, ImportsPreferencesPage.DEFAULT_SORT_NAMES_GROUPED);
 
         //hover
-        node.putBoolean(PyHoverPreferencesPage.SHOW_DOCSTRING_ON_HOVER,
-                PyHoverPreferencesPage.DEFAULT_SHOW_DOCSTRING_ON_HOVER);
+        node.putBoolean(PyHoverPreferencesPage.COMBINE_HOVER_INFO,
+                PyHoverPreferencesPage.DEFAULT_SHOW_DEBUG_VARIABLES_VALUES_ON_HOVER);
         node.putBoolean(PyHoverPreferencesPage.SHOW_DEBUG_VARIABLES_VALUES_ON_HOVER,
                 PyHoverPreferencesPage.DEFAULT_SHOW_DEBUG_VARIABLES_VALUES_ON_HOVER);
+        node.putBoolean(PyHoverPreferencesPage.USE_HOVER_DIVIDER,
+                PyHoverPreferencesPage.DEFAULT_USE_HOVER_DIVIDER);
 
         //source locator
         node.putInt(PySourceLocatorPrefs.ON_SOURCE_NOT_FOUND,

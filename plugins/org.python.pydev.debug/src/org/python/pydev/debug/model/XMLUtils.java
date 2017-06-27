@@ -145,6 +145,18 @@ public class XMLUtils {
         } else {
             var = new PyVariable(target, name, type, value, locator);
         }
+        String isRetVal = attributes.getValue("isRetVal");
+        if ("True".equals(isRetVal)) {
+            var.setIsReturnValue(true);
+        }
+        String isIPythonHidden = attributes.getValue("isIPythonHidden");
+        if ("True".equals(isIPythonHidden)) {
+            var.setIsIPythonHidden(true);
+        }
+        String isErrorOnEval = attributes.getValue("isErrorOnEval");
+        if ("True".equals(isErrorOnEval)) {
+            var.setIsErrorOnEval(true);
+        }
         return var;
     }
 
@@ -191,7 +203,8 @@ public class XMLUtils {
 
             String line = attributes.getValue("line");
             IPath filePath = new Path(file);
-            // Try to recycle old stack objects
+            // Try to recycle old stack objects (this is needed so that in a step over we
+            // reuse the same frame and keep the expanded state of the frame).
             currentFrame = thread.findStackFrameByID(id);
             if (currentFrame == null) {
                 currentFrame = new PyStackFrame(thread, id, name, filePath, Integer.parseInt(line), target);
@@ -199,6 +212,8 @@ public class XMLUtils {
                 currentFrame.setName(name);
                 currentFrame.setPath(filePath);
                 currentFrame.setLine(Integer.parseInt(line));
+                // If we found it, reuse it and make sure that new variables will be asked when requested.
+                currentFrame.forceGetNewVariables();
             }
             stack.add(currentFrame);
         }
@@ -256,7 +271,7 @@ public class XMLUtils {
      * @return an array of [thread_id, stopReason, IStackFrame[]]
      */
     public static StoppedStack XMLToStack(AbstractDebugTarget target, String payload) throws CoreException {
-        IStackFrame[] stack;
+        IStackFrame[] stack = new IStackFrame[0];
         StoppedStack retVal;
         try {
             SAXParser parser = getSAXParser();
@@ -510,9 +525,11 @@ public class XMLUtils {
         } catch (CoreException e) {
             throw e;
         } catch (SAXException e) {
-            throw new CoreException(PydevDebugPlugin.makeStatus(IStatus.ERROR, "Unexpected XML error", e));
+            throw new CoreException(
+                    PydevDebugPlugin.makeStatus(IStatus.ERROR, "Unexpected XML error. Payload:\n" + payload, e));
         } catch (IOException e) {
-            throw new CoreException(PydevDebugPlugin.makeStatus(IStatus.ERROR, "Unexpected XML error", e));
+            throw new CoreException(
+                    PydevDebugPlugin.makeStatus(IStatus.ERROR, "Unexpected XML error. Payload:\n" + payload, e));
         }
 
     }
